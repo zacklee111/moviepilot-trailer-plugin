@@ -5,6 +5,7 @@ from app.plugins import _PluginBase
 from app.log import logger
 from app.scheduler import Scheduler
 from app.utils.scheduler import run_in_thread
+from app.utils.types import Channel, Source
 from pathlib import Path
 import subprocess
 import re
@@ -15,9 +16,9 @@ class TrailerDownloader(_PluginBase):
     # 插件名称
     plugin_name = "预告片自动下载"
     # 插件描述
-    plugin_desc = "电影入库后自动从 YouTube 下载预告片"
+    plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.1"
+    plugin_version = "1.2"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -44,6 +45,7 @@ class TrailerDownloader(_PluginBase):
     _schedule_time = "03:00"
     _scheduler = None
     _job_id = "trailerdownloader_scan"
+    _scanning = False  # 防止重复扫描
 
     def init_plugin(self, config: dict = None):
         """初始化插件"""
@@ -102,12 +104,18 @@ class TrailerDownloader(_PluginBase):
         if not self._enabled:
             return {"code": 1, "msg": "插件未启用"}
         
+        if self._scanning:
+            return {"code": 1, "msg": "正在扫描中，请稍候..."}
+        
         try:
+            self._scanning = True
             self._scan_all_movies()
             return {"code": 0, "msg": "扫描完成，请查看日志"}
         except Exception as e:
             logger.error(f"扫描失败: {str(e)}")
             return {"code": 1, "msg": f"扫描失败: {str(e)}"}
+        finally:
+            self._scanning = False
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """获取插件配置表单"""
@@ -115,6 +123,7 @@ class TrailerDownloader(_PluginBase):
             {
                 'component': 'VForm',
                 'content': [
+                    # 第一行：启用开关和语言选择
                     {
                         'component': 'VRow',
                         'content': [
@@ -158,6 +167,7 @@ class TrailerDownloader(_PluginBase):
                             }
                         ]
                     },
+                    # 第二行：来源、质量、大小
                     {
                         'component': 'VRow',
                         'content': [
@@ -213,6 +223,7 @@ class TrailerDownloader(_PluginBase):
                             }
                         ]
                     },
+                    # 第三行：代理设置
                     {
                         'component': 'VRow',
                         'content': [
@@ -232,6 +243,7 @@ class TrailerDownloader(_PluginBase):
                             }
                         ]
                     },
+                    # 第四行：监控路径
                     {
                         'component': 'VRow',
                         'content': [
@@ -251,6 +263,7 @@ class TrailerDownloader(_PluginBase):
                             }
                         ]
                     },
+                    # 第五行：定时设置
                     {
                         'component': 'VRow',
                         'content': [
@@ -279,6 +292,57 @@ class TrailerDownloader(_PluginBase):
                                 ]
                             }
                         ]
+                    },
+                    # 第六行：立即扫描按钮
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12},
+                                'content': [
+                                    {
+                                        'component': 'VAlert',
+                                        'props': {
+                                            'type': 'info',
+                                            'variant': 'tonal',
+                                            'text': '点击下方按钮立即扫描所有电影文件夹并下载预告片'
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        'component': 'VRow',
+                        'content': [
+                            {
+                                'component': 'VCol',
+                                'props': {'cols': 12, 'class': 'text-center'},
+                                'content': [
+                                    {
+                                        'component': 'VBtn',
+                                        'props': {
+                                            'color': 'primary',
+                                            'block': True,
+                                            'max-width': 300,
+                                            'onclick': 'plugin_trailerdownloader_scan'
+                                        },
+                                        'content': [
+                                            {
+                                                'component': 'VIcon',
+                                                'props': {'start': True},
+                                                'text': 'mdi-movie-search'
+                                            },
+                                            {
+                                                'component': 'span',
+                                                'text': '🚀 立即扫描全库'
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 ]
             }
@@ -297,7 +361,7 @@ class TrailerDownloader(_PluginBase):
 
     def get_page(self) -> List[dict]:
         """获取插件页面"""
-        pass
+        return []
 
     def stop_service(self):
         """停止插件"""
@@ -335,13 +399,24 @@ class TrailerDownloader(_PluginBase):
     def _scan_all_movies(self):
         """扫描所有电影文件夹"""
         if not self._monitor_paths:
-            logger.warning("未设置监控路径，无法扫描")
-            return
+            logger.warning("未设置监控路径，将扫描所有媒体库")
+            # 如果没有设置监控路径，使用默认的媒体库路径
+            from app.utils.path import PathUtils
+            default_paths = PathUtils.get_movie_path()
+            if default_paths:
+                scan_paths = [str(default_paths)] if isinstance(default_paths, Path) else default_paths
+            else:
+                logger.warning("无法获取默认媒体库路径，请在插件设置中配置监控路径")
+                return
+        else:
+            scan_paths = [p.strip() for p in self._monitor_paths.split(",")]
         
-        logger.info("开始全库扫描电影文件夹...")
-        scan_paths = [p.strip() for p in self._monitor_paths.split(",")]
+        logger.info(f"开始全库扫描，共 {len(scan_paths)} 个路径...")
         
         total = 0
+        success = 0
+        skip = 0
+        
         for scan_path in scan_paths:
             if not scan_path:
                 continue
@@ -350,19 +425,31 @@ class TrailerDownloader(_PluginBase):
                 logger.warning(f"路径不存在: {scan_path}")
                 continue
             
+            logger.info(f"扫描路径: {scan_path}")
             # 遍历所有子文件夹
             for folder in base_path.iterdir():
                 if folder.is_dir():
                     total += 1
-                    self._process_movie_folder(folder)
+                    result = self._process_movie_folder(folder)
+                    if result == "success":
+                        success += 1
+                    elif result == "skip":
+                        skip += 1
         
-        logger.info(f"全库扫描完成，共处理 {total} 个文件夹")
+        logger.info(f"全库扫描完成！共处理 {total} 个文件夹，成功 {success}，跳过 {skip}")
 
     @run_in_thread
     def manual_scan(self, event: Event):
         """手动扫描命令"""
+        if self._scanning:
+            logger.info("正在扫描中，忽略重复请求")
+            return
+        self._scanning = True
         logger.info("收到手动扫描命令，开始扫描...")
-        self._scan_all_movies()
+        try:
+            self._scan_all_movies()
+        finally:
+            self._scanning = False
 
     @eventmanager.register(EventType.TransferComplete)
     def download_trailer(self, event: Event):
@@ -410,24 +497,27 @@ class TrailerDownloader(_PluginBase):
         else:
             logger.warning(f"预告片下载失败: {movie_name}")
 
-    def _process_movie_folder(self, folder: Path):
-        """处理单个电影文件夹"""
+    def _process_movie_folder(self, folder: Path) -> str:
+        """
+        处理单个电影文件夹
+        返回: "success", "skip", "error"
+        """
         if not folder.is_dir():
-            return
+            return "error"
         
         # 检查是否在监控路径内
         if not self._is_path_monitored(folder):
-            return
+            return "skip"
         
         # 检查是否已存在预告片
         if self._skip_existing and self._check_existing_trailer(folder):
             logger.debug(f"预告片已存在，跳过: {folder.name}")
-            return
+            return "skip"
         
         # 检查是否有视频文件
         video_files = self._get_video_files(folder)
         if not video_files:
-            return
+            return "skip"
         
         movie_name = self._get_movie_name(folder)
         
@@ -437,16 +527,21 @@ class TrailerDownloader(_PluginBase):
         
         if success:
             logger.info(f"预告片下载成功: {movie_name}")
+            return "success"
         else:
             logger.warning(f"预告片下载失败: {movie_name}")
+            return "error"
 
     def _get_video_files(self, folder: Path) -> List[Path]:
         """获取文件夹中的视频文件"""
         video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.ts', '.m2ts'}
         videos = []
-        for file in folder.iterdir():
-            if file.is_file() and file.suffix.lower() in video_extensions:
-                videos.append(file)
+        try:
+            for file in folder.iterdir():
+                if file.is_file() and file.suffix.lower() in video_extensions:
+                    videos.append(file)
+        except Exception as e:
+            logger.error(f"扫描文件夹失败: {folder} - {str(e)}")
         return videos
 
     def _is_path_monitored(self, path: Path) -> bool:
@@ -523,7 +618,7 @@ class TrailerDownloader(_PluginBase):
             cmd.extend(["--proxy", self._proxy])
         
         try:
-            logger.info(f"执行命令: {' '.join(cmd[:5])}...")
+            logger.info(f"正在搜索下载: {search_query}")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
