@@ -17,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.9"
+    plugin_version = "2.0"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -72,22 +72,25 @@ class TrailerDownloader(_PluginBase):
         """获取插件状态"""
         return self._enabled
 
-    @staticmethod
-    def get_command() -> List[Dict[str, Any]]:
-        """
-        定义远程控制命令
-        """
-        return [
-            {
-                "cmd": "/trailer-scan",
-                "event": EventType.PluginAction,
-                "desc": "手动扫描全库下载预告片",
-                "category": "预告片",
-                "data": {
-                    "action": "scan"
-                }
-            }
-        ]
+    @eventmanager.register(EventType.PluginAction)
+    def handle_action(self, event: Event):
+        """处理插件命令"""
+        if not event or not event.event_data:
+            return
+        action = event.event_data.get("action")
+        if action == "trailer_scan":
+            self._trigger_scan()
+
+    def _trigger_scan(self):
+        """触发扫描"""
+        if not self._enabled:
+            logger.warning("插件未启用，无法扫描")
+            return
+        if self._scanning:
+            logger.info("正在扫描中，跳过本次请求")
+            return
+        logger.info("收到手动扫描指令，开始扫描...")
+        ThreadPoolExecutor(max_workers=1).submit(self._scan_all_movies)
 
     def get_service(self) -> List[Dict[str, Any]]:
         """
