@@ -17,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.7"
+    plugin_version = "1.8"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -58,6 +58,9 @@ class TrailerDownloader(_PluginBase):
             self._monitor_paths = config.get("monitor_paths", "")
             self._enable_schedule = config.get("enable_schedule", False)
             self._schedule_time = config.get("schedule_time", "03:00")
+        
+        # 调试日志
+        logger.info(f"代理配置: {self._proxy or '未设置'}")
 
         # 取消之前的定时任务
         self._cancel_schedule()
@@ -622,6 +625,8 @@ class TrailerDownloader(_PluginBase):
         
         try:
             logger.info(f"正在搜索下载: {search_query}")
+            # 调试：打印完整命令
+            logger.debug(f"执行命令: {' '.join(cmd)}")
             result = subprocess.run(
                 cmd,
                 capture_output=True,
