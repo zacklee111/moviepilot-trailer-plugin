@@ -3,13 +3,12 @@ from app.core.event import eventmanager, Event
 from app.schemas.types import EventType
 from app.plugins import _PluginBase
 from app.log import logger
-from app.scheduler import Scheduler
-from app.utils.scheduler import run_in_thread
-from app.utils.types import Channel, Source
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import subprocess
 import re
-import os
 
 
 class TrailerDownloader(_PluginBase):
@@ -18,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.2"
+    plugin_version = "1.3"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -44,7 +43,6 @@ class TrailerDownloader(_PluginBase):
     _enable_schedule = False
     _schedule_time = "03:00"
     _scheduler = None
-    _job_id = "trailerdownloader_scan"
     _scanning = False  # 防止重复扫描
 
     def init_plugin(self, config: dict = None):
@@ -66,14 +64,26 @@ class TrailerDownloader(_PluginBase):
         
         if self._enabled:
             logger.info(f"预告片自动下载插件已启用，语言: {self._trailer_language}, 来源: {self._source}")
-            # 启动定时扫描
-            if self._enable_schedule:
-                self._start_schedule()
-                logger.info(f"定时扫描已启用，时间: {self._schedule_time}")
 
     def get_state(self) -> bool:
         """获取插件状态"""
         return self._enabled
+
+    def get_service(self) -> List[Dict[str, Any]]:
+        """
+        注册定时服务
+        """
+        if not self._enabled or not self._enable_schedule:
+            return []
+        
+        # 返回定时任务配置
+        return [{
+            "id": "trailerdownloader_scan",
+            "name": "预告片全库扫描",
+            "trigger": CronTrigger.from_crontab(f"{self._schedule_time.split(':')[1]} {self._schedule_time.split(':')[0]} * * *"),
+            "func": self._scan_all_movies,
+            "kwargs": {}
+        }]
 
     @staticmethod
     def get_command() -> List[Dict[str, Any]]:
@@ -368,88 +378,82 @@ class TrailerDownloader(_PluginBase):
         self._enabled = False
         self._cancel_schedule()
 
-    def _start_schedule(self):
-        """启动定时任务"""
-        try:
-            from app.scheduler import Scheduler
-            if not self._scheduler:
-                self._scheduler = Scheduler()
-            
-            hour, minute = self._schedule_time.split(":")
-            self._scheduler.add_job(
-                func=self._scan_all_movies,
-                trigger="cron",
-                hour=int(hour),
-                minute=int(minute),
-                id=self._job_id,
-                name="预告片全库扫描"
-            )
-            logger.info(f"定时任务已添加: 每天 {self._schedule_time}")
-        except Exception as e:
-            logger.error(f"添加定时任务失败: {str(e)}")
-
     def _cancel_schedule(self):
         """取消定时任务"""
         try:
             if self._scheduler:
-                self._scheduler.remove_job(self._job_id)
+                self._scheduler.shutdown(wait=False)
+                self._scheduler = None
         except Exception:
             pass
 
     def _scan_all_movies(self):
         """扫描所有电影文件夹"""
-        if not self._monitor_paths:
-            logger.warning("未设置监控路径，将扫描所有媒体库")
-            # 如果没有设置监控路径，使用默认的媒体库路径
-            from app.utils.path import PathUtils
-            default_paths = PathUtils.get_movie_path()
-            if default_paths:
-                scan_paths = [str(default_paths)] if isinstance(default_paths, Path) else default_paths
-            else:
-                logger.warning("无法获取默认媒体库路径，请在插件设置中配置监控路径")
-                return
-        else:
-            scan_paths = [p.strip() for p in self._monitor_paths.split(",")]
-        
-        logger.info(f"开始全库扫描，共 {len(scan_paths)} 个路径...")
-        
-        total = 0
-        success = 0
-        skip = 0
-        
-        for scan_path in scan_paths:
-            if not scan_path:
-                continue
-            base_path = Path(scan_path)
-            if not base_path.exists():
-                logger.warning(f"路径不存在: {scan_path}")
-                continue
+        if self._scanning:
+            logger.info("正在扫描中，跳过本次扫描")
+            return
             
-            logger.info(f"扫描路径: {scan_path}")
-            # 遍历所有子文件夹
-            for folder in base_path.iterdir():
-                if folder.is_dir():
-                    total += 1
-                    result = self._process_movie_folder(folder)
-                    if result == "success":
-                        success += 1
-                    elif result == "skip":
-                        skip += 1
+        self._scanning = True
+        logger.info("开始全库扫描电影文件夹...")
         
-        logger.info(f"全库扫描完成！共处理 {total} 个文件夹，成功 {success}，跳过 {skip}")
+        try:
+            if not self._monitor_paths:
+                logger.warning("未设置监控路径，将扫描所有媒体库")
+                # 如果没有设置监控路径，尝试获取默认的媒体库路径
+                try:
+                    from app.utils.path import PathUtils
+                    default_paths = PathUtils.get_movie_path()
+                    if default_paths:
+                        scan_paths = [str(default_paths)] if isinstance(default_paths, (str, Path)) else default_paths
+                    else:
+                        logger.warning("无法获取默认媒体库路径，请在插件设置中配置监控路径")
+                        return
+                except Exception as e:
+                    logger.warning(f"无法获取默认路径: {str(e)}，请在插件设置中配置监控路径")
+                    return
+            else:
+                scan_paths = [p.strip() for p in self._monitor_paths.split(",")]
+            
+            logger.info(f"开始全库扫描，共 {len(scan_paths)} 个路径...")
+            
+            total = 0
+            success = 0
+            skip = 0
+            
+            for scan_path in scan_paths:
+                if not scan_path:
+                    continue
+                base_path = Path(scan_path)
+                if not base_path.exists():
+                    logger.warning(f"路径不存在: {scan_path}")
+                    continue
+                
+                logger.info(f"扫描路径: {scan_path}")
+                # 遍历所有子文件夹
+                try:
+                    for folder in base_path.iterdir():
+                        if folder.is_dir():
+                            total += 1
+                            result = self._process_movie_folder(folder)
+                            if result == "success":
+                                success += 1
+                            elif result == "skip":
+                                skip += 1
+                except Exception as e:
+                    logger.error(f"扫描路径失败: {scan_path} - {str(e)}")
+            
+            logger.info(f"全库扫描完成！共处理 {total} 个文件夹，成功 {success}，跳过 {skip}")
+        finally:
+            self._scanning = False
 
-    @run_in_thread
-    def manual_scan(self, event: Event):
+    def manual_scan(self, event: Event = None):
         """手动扫描命令"""
         if self._scanning:
             logger.info("正在扫描中，忽略重复请求")
             return
-        self._scanning = True
-        logger.info("收到手动扫描命令，开始扫描...")
-        try:
-            self._scan_all_movies()
-        finally:
-            self._scanning = False
+        # 在新线程中执行
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(self._scan_all_movies)
 
     @eventmanager.register(EventType.TransferComplete)
     def download_trailer(self, event: Event):
