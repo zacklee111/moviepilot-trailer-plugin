@@ -17,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.3"
+    plugin_version = "1.4"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -398,21 +398,10 @@ class TrailerDownloader(_PluginBase):
         
         try:
             if not self._monitor_paths:
-                logger.warning("未设置监控路径，将扫描所有媒体库")
-                # 如果没有设置监控路径，尝试获取默认的媒体库路径
-                try:
-                    from app.utils.path import PathUtils
-                    default_paths = PathUtils.get_movie_path()
-                    if default_paths:
-                        scan_paths = [str(default_paths)] if isinstance(default_paths, (str, Path)) else default_paths
-                    else:
-                        logger.warning("无法获取默认媒体库路径，请在插件设置中配置监控路径")
-                        return
-                except Exception as e:
-                    logger.warning(f"无法获取默认路径: {str(e)}，请在插件设置中配置监控路径")
-                    return
-            else:
-                scan_paths = [p.strip() for p in self._monitor_paths.split(",")]
+                logger.warning("未设置监控路径，请先在插件设置中配置监控路径！")
+                return
+            
+            scan_paths = [p.strip() for p in self._monitor_paths.split(",")]
             
             logger.info(f"开始全库扫描，共 {len(scan_paths)} 个路径...")
             
