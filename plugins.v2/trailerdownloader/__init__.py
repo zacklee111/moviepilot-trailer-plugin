@@ -17,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.5"
+    plugin_version = "1.6"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -593,17 +593,17 @@ class TrailerDownloader(_PluginBase):
         
         search_query = f"{movie_name}{lang_suffix}"
         
-        # yt-dlp 命令 - 使用 ytsearch1: 进行搜索
+        # yt-dlp 命令 - 使用 ytsearch1: 进行搜索，只取第一个结果
         cmd = [
             "yt-dlp",
+            "--flat-playlist",  # 只处理播放列表第一个视频
             "--no-playlist",
             "--quiet",
             "--no-warnings",
             "--match-filter", "duration < 300",
             "--max-filesize", f"{self._max_size_mb}M",
             "-f", self._video_quality,
-            "--output", str(trailer_file),
-            "--merge-output-format", "mp4",
+            "-o", str(trailer_file),
             "--", f"ytsearch1:{search_query}"
         ]
         
