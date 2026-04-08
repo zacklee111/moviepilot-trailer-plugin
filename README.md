@@ -15,7 +15,7 @@
 
 在 MoviePilot 插件市场中添加仓库地址：
 ```
-https://github.com/你的用户名/moviepilot-trailer-plugin
+https://github.com/zacklee111/moviepilot-trailer-plugin
 ```
 
 ## 配置说明

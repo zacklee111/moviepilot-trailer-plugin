@@ -1,12 +1,15 @@
 {
-  "plugins": [
-    {
-      "id": "TrailerDownloader",
-      "name": "预告片自动下载",
-      "desc": "电影入库后自动从 YouTube 下载预告片，保存为 -trailer.mp4 格式",
-      "version": "1.0",
-      "level": 1,
-      "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
+  "TrailerDownloader": {
+    "name": "预告片自动下载",
+    "description": "电影入库后自动从 YouTube 下载预告片，保存为 -trailer.mp4 格式",
+    "labels": "下载,电影",
+    "version": "1.0",
+    "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png",
+    "author": "zacklee",
+    "level": 1,
+    "home": "https://github.com/zacklee111/moviepilot-trailer-plugin",
+    "history": {
+      "v1.0": "初始版本，支持 YouTube 预告片下载"
     }
-  ]
+  }
 }

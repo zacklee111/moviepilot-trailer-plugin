@@ -19,9 +19,9 @@ class TrailerDownloader(_PluginBase):
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
-    plugin_author = "User"
+    plugin_author = "zacklee"
     # 作者主页
-    author_url = ""
+    author_url = "https://github.com/zacklee111/moviepilot-trailer-plugin"
     # 插件配置项ID前缀
     plugin_config_prefix = "trailerdownloader_"
     # 加载顺序
