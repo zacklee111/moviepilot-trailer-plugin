@@ -7,7 +7,6 @@
     "icon": "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png",
     "author": "zacklee",
     "level": 1,
-    "v2": true,
     "home": "https://github.com/zacklee111/moviepilot-trailer-plugin",
     "history": {
       "v1.0": "初始版本，支持 YouTube 预告片下载"
