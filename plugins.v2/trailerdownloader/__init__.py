@@ -17,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.6"
+    plugin_version = "1.7"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -607,8 +607,18 @@ class TrailerDownloader(_PluginBase):
             "--", f"ytsearch1:{search_query}"
         ]
         
+        # 设置代理
+        env = None
         if self._proxy:
             cmd.extend(["--proxy", self._proxy])
+            # 同时设置环境变量，确保所有网络请求都走代理
+            import os
+            env = os.environ.copy()
+            env["HTTP_PROXY"] = self._proxy
+            env["HTTPS_PROXY"] = self._proxy
+            env["http_proxy"] = self._proxy
+            env["https_proxy"] = self._proxy
+            logger.info(f"使用代理: {self._proxy}")
         
         try:
             logger.info(f"正在搜索下载: {search_query}")
@@ -616,7 +626,8 @@ class TrailerDownloader(_PluginBase):
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
+                env=env
             )
             
             if result.returncode == 0 and trailer_file.exists():
