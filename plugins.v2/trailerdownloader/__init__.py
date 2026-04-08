@@ -17,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "1.8"
+    plugin_version = "1.9"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -72,6 +72,23 @@ class TrailerDownloader(_PluginBase):
         """获取插件状态"""
         return self._enabled
 
+    @staticmethod
+    def get_command() -> List[Dict[str, Any]]:
+        """
+        定义远程控制命令
+        """
+        return [
+            {
+                "cmd": "/trailer-scan",
+                "event": EventType.PluginAction,
+                "desc": "手动扫描全库下载预告片",
+                "category": "预告片",
+                "data": {
+                    "action": "scan"
+                }
+            }
+        ]
+
     def get_service(self) -> List[Dict[str, Any]]:
         """
         注册定时服务
@@ -87,48 +104,6 @@ class TrailerDownloader(_PluginBase):
             "func": self._scan_all_movies,
             "kwargs": {}
         }]
-
-    @staticmethod
-    def get_command() -> List[Dict[str, Any]]:
-        """注册插件命令"""
-        return [
-            {
-                "cmd": "/trailer-scan",
-                "event": EventType.SystemReady,
-                "handler": "manual_scan",
-                "desc": "手动扫描并下载预告片"
-            }
-        ]
-
-    def get_api(self) -> List[Dict[str, Any]]:
-        """注册插件API"""
-        return [
-            {
-                "path": "/trailer/scan",
-                "name": "trailer_scan",
-                "method": "GET",
-                "summary": "手动触发预告片扫描",
-                "handler": self.api_scan
-            }
-        ]
-
-    def api_scan(self) -> Dict[str, Any]:
-        """API: 手动触发扫描"""
-        if not self._enabled:
-            return {"code": 1, "msg": "插件未启用"}
-        
-        if self._scanning:
-            return {"code": 1, "msg": "正在扫描中，请稍候..."}
-        
-        try:
-            self._scanning = True
-            self._scan_all_movies()
-            return {"code": 0, "msg": "扫描完成，请查看日志"}
-        except Exception as e:
-            logger.error(f"扫描失败: {str(e)}")
-            return {"code": 1, "msg": f"扫描失败: {str(e)}"}
-        finally:
-            self._scanning = False
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """获取插件配置表单"""
@@ -339,7 +314,8 @@ class TrailerDownloader(_PluginBase):
                                             'color': 'primary',
                                             'block': True,
                                             'max-width': 300,
-                                            'onclick': 'plugin_trailerdownloader_scan'
+                                            'href': '/movie',
+                                            'target': '_blank'
                                         },
                                         'content': [
                                             {
