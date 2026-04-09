@@ -17,7 +17,7 @@ class TrailerDownloader(_PluginBase):
     # 插件描述
     plugin_desc = "电影入库后自动从 YouTube 下载预告片，支持定时全库扫描"
     # 插件版本
-    plugin_version = "2.0"
+    plugin_version = "2.1"
     # 插件图标
     plugin_icon = "https://raw.githubusercontent.com/jxxghp/MoviePilot-Plugins/main/icons/movie.png"
     # 插件作者
@@ -96,17 +96,24 @@ class TrailerDownloader(_PluginBase):
         """
         注册定时服务
         """
-        if not self._enabled or not self._enable_schedule:
+        if not self._enabled or not self._enable_schedule or not self._schedule_time:
             return []
-        
-        # 返回定时任务配置
-        return [{
-            "id": "trailerdownloader_scan",
-            "name": "预告片全库扫描",
-            "trigger": CronTrigger.from_crontab(f"{self._schedule_time.split(':')[1]} {self._schedule_time.split(':')[0]} * * *"),
-            "func": self._scan_all_movies,
-            "kwargs": {}
-        }]
+
+        try:
+            parts = self._schedule_time.strip().split(":")
+            hour = int(parts[0])
+            minute = int(parts[1]) if len(parts) > 1 else 0
+            cron_expr = f"{minute} {hour} * * *"
+            return [{
+                "id": "TrailerDownloaderScan",
+                "name": "预告片全库扫描",
+                "trigger": CronTrigger.from_crontab(cron_expr),
+                "func": self._scan_all_movies,
+                "kwargs": {}
+            }]
+        except Exception as e:
+            logger.error(f"定时任务配置解析失败: {self._schedule_time} - {e}")
+            return []
 
     def get_form(self) -> Tuple[List[dict], Dict[str, Any]]:
         """获取插件配置表单"""
@@ -590,17 +597,25 @@ class TrailerDownloader(_PluginBase):
         ]
         
         # 设置代理
-        env = None
+        import os
+        env = os.environ.copy()
         if self._proxy:
+            # 用户手动填写了代理，优先使用
             cmd.extend(["--proxy", self._proxy])
-            # 同时设置环境变量，确保所有网络请求都走代理
-            import os
-            env = os.environ.copy()
             env["HTTP_PROXY"] = self._proxy
             env["HTTPS_PROXY"] = self._proxy
             env["http_proxy"] = self._proxy
             env["https_proxy"] = self._proxy
-            logger.info(f"使用代理: {self._proxy}")
+            logger.info(f"使用手动代理: {self._proxy}")
+        else:
+            # 未填写代理，检查系统环境变量
+            sys_proxy = (env.get("HTTP_PROXY") or env.get("http_proxy") or
+                         env.get("HTTPS_PROXY") or env.get("https_proxy") or "")
+            if sys_proxy:
+                cmd.extend(["--proxy", sys_proxy])
+                logger.info(f"使用系统代理: {sys_proxy}")
+            else:
+                logger.warning("未设置任何代理，直连可能失败")
         
         try:
             logger.info(f"正在搜索下载: {search_query}")
