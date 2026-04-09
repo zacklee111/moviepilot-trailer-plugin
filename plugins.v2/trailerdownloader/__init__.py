@@ -604,25 +604,29 @@ class TrailerDownloader(_PluginBase):
             "--", f"ytsearch1:{search_query}"
         ]
         
-        # 设置代理
+        # 设置代理 - 注意：必须在 -- 之前，否则会被当作 URL 的一部分
         import os
         env = os.environ.copy()
+        proxy_to_use = ""
         if self._proxy:
-            # 用户手动填写了代理，优先使用
-            cmd.extend(["--proxy", self._proxy])
-            env["HTTP_PROXY"] = self._proxy
-            env["HTTPS_PROXY"] = self._proxy
-            env["http_proxy"] = self._proxy
-            env["https_proxy"] = self._proxy
+            proxy_to_use = self._proxy
             logger.info(f"使用手动代理: {self._proxy}")
         else:
             # 未填写代理，检查系统环境变量
-            sys_proxy = (env.get("HTTP_PROXY") or env.get("http_proxy") or
-                         env.get("HTTPS_PROXY") or env.get("https_proxy") or "")
-            if sys_proxy:
-                cmd.extend(["--proxy", sys_proxy])
-                logger.info(f"使用系统代理: {sys_proxy}")
-            else:
+            proxy_to_use = (env.get("HTTP_PROXY") or env.get("http_proxy") or
+                           env.get("HTTPS_PROXY") or env.get("https_proxy") or "")
+            if proxy_to_use:
+                logger.info(f"使用系统代理: {proxy_to_use}")
+
+        if proxy_to_use:
+            # 代理参数必须放在 URL 之前
+            cmd.extend(["--proxy", proxy_to_use])
+            env["HTTP_PROXY"] = proxy_to_use
+            env["HTTPS_PROXY"] = proxy_to_use
+            env["http_proxy"] = proxy_to_use
+            env["https_proxy"] = proxy_to_use
+        else:
+            logger.warning("未设置任何代理，直连可能失败")
                 logger.warning("未设置任何代理，直连可能失败")
         
         try:
