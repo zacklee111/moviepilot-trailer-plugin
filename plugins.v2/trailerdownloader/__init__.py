@@ -92,6 +92,12 @@ class TrailerDownloader(_PluginBase):
         logger.info("收到手动扫描指令，开始扫描...")
         ThreadPoolExecutor(max_workers=1).submit(self._scan_all_movies)
 
+    def get_api(self) -> List[Dict[str, Any]]:
+        """
+        注册 API 路由（本插件不使用）
+        """
+        return []
+
     def get_service(self) -> List[Dict[str, Any]]:
         """
         注册定时服务
