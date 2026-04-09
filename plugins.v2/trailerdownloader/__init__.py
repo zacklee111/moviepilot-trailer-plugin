@@ -588,23 +588,7 @@ class TrailerDownloader(_PluginBase):
         
         search_query = f"{movie_name}{lang_suffix}"
         
-        # yt-dlp 命令 - 使用 ytsearch1: 进行搜索，只取第一个结果
-        # 注意：输出路径使用模板格式，让 yt-dlp 可以自动处理重名情况
-        cmd = [
-            "yt-dlp",
-            "--flat-playlist",  # 只处理播放列表第一个视频
-            "--no-playlist",
-            "--quiet",
-            "--no-warnings",
-            "--match-filter", "duration < 300",
-            "--max-filesize", f"{self._max_size_mb}M",
-            "-f", self._video_quality,
-            # 使用模板而非固定文件名，避免 "more than one file" 错误
-            "-o", str(trailer_file.parent / f"{movie_folder.name}-trailer.%(ext)s"),
-            "--", f"ytsearch1:{search_query}"
-        ]
-        
-        # 设置代理 - 注意：必须在 -- 之前，否则会被当作 URL 的一部分
+        # 设置代理
         import os
         env = os.environ.copy()
         proxy_to_use = ""
@@ -617,17 +601,36 @@ class TrailerDownloader(_PluginBase):
                            env.get("HTTPS_PROXY") or env.get("https_proxy") or "")
             if proxy_to_use:
                 logger.info(f"使用系统代理: {proxy_to_use}")
-
+        
         if proxy_to_use:
-            # 代理参数必须放在 URL 之前
-            cmd.extend(["--proxy", proxy_to_use])
             env["HTTP_PROXY"] = proxy_to_use
             env["HTTPS_PROXY"] = proxy_to_use
             env["http_proxy"] = proxy_to_use
             env["https_proxy"] = proxy_to_use
         else:
             logger.warning("未设置任何代理，直连可能失败")
-
+        
+        # yt-dlp 命令 - 代理参数必须在 -- 之前
+        cmd = [
+            "yt-dlp",
+            "--flat-playlist",  # 只处理播放列表第一个视频
+            "--no-playlist",
+            "--quiet",
+            "--no-warnings",
+            "--match-filter", "duration < 300",
+            "--max-filesize", f"{self._max_size_mb}M",
+            "-f", self._video_quality,
+            # 使用模板而非固定文件名，避免 "more than one file" 错误
+            "-o", str(trailer_file.parent / f"{movie_folder.name}-trailer.%(ext)s"),
+        ]
+        
+        # 代理参数必须放在 -- 之前
+        if proxy_to_use:
+            cmd.extend(["--proxy", proxy_to_use])
+        
+        # URL 必须放在最后（-- 之后）
+        cmd.extend(["--", f"ytsearch1:{search_query}"])
+        
         try:
             logger.info(f"正在搜索下载: {search_query}")
             # 调试：打印完整命令
