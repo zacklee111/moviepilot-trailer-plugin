@@ -627,8 +627,7 @@ class TrailerDownloader(_PluginBase):
             env["https_proxy"] = proxy_to_use
         else:
             logger.warning("未设置任何代理，直连可能失败")
-                logger.warning("未设置任何代理，直连可能失败")
-        
+
         try:
             logger.info(f"正在搜索下载: {search_query}")
             # 调试：打印完整命令
