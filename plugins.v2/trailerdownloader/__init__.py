@@ -589,6 +589,7 @@ class TrailerDownloader(_PluginBase):
         search_query = f"{movie_name}{lang_suffix}"
         
         # yt-dlp 命令 - 使用 ytsearch1: 进行搜索，只取第一个结果
+        # 注意：输出路径使用模板格式，让 yt-dlp 可以自动处理重名情况
         cmd = [
             "yt-dlp",
             "--flat-playlist",  # 只处理播放列表第一个视频
@@ -598,7 +599,8 @@ class TrailerDownloader(_PluginBase):
             "--match-filter", "duration < 300",
             "--max-filesize", f"{self._max_size_mb}M",
             "-f", self._video_quality,
-            "-o", str(trailer_file),
+            # 使用模板而非固定文件名，避免 "more than one file" 错误
+            "-o", str(trailer_file.parent / f"{movie_folder.name}-trailer.%(ext)s"),
             "--", f"ytsearch1:{search_query}"
         ]
         
